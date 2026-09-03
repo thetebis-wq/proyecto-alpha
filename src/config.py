@@ -34,5 +34,9 @@ COINGECKO_API_KEY: str = os.getenv("COINGECKO_API_KEY", "").strip()
 COINGECKO_BASE_URL: str = "https://api.coingecko.com/api/v3"
 ENVIRONMENT: str = os.getenv("ENVIRONMENT", "development")
 
+# 4. Configuración de Telegram Bot API
+TELEGRAM_BOT_TOKEN: str = os.getenv("TELEGRAM_BOT_TOKEN", "").strip()
+TELEGRAM_CHAT_ID: str = os.getenv("TELEGRAM_CHAT_ID", "").strip()
+
 # Tiempo límite estándar para peticiones HTTP en segundos (buena práctica de ciberseguridad)
 REQUEST_TIMEOUT: int = 10

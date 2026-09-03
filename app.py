@@ -122,6 +122,16 @@ if st.sidebar.button("🔄 Refrescar API y Recalcular", use_container_width=True
     st.cache_data.clear()
     st.rerun()
 
+st.sidebar.markdown("---")
+st.sidebar.subheader("🔔 Notificaciones Telegram")
+if st.sidebar.button("📲 Probar Alerta en Celular", use_container_width=True):
+    from src.alerts.telegram_notifier import TelegramNotifier
+    notifier = TelegramNotifier()
+    if notifier.send_message("🔔 <b>¡Prueba desde tu Dashboard!</b>\nTu conexión entre la terminal y tu celular está 100% activa."):
+        st.sidebar.success("¡Mensaje enviado a tu Telegram!")
+    else:
+        st.sidebar.error("No se pudo enviar. Revisa tus credenciales en .env.")
+
 st.sidebar.caption("⚡ Proyecto Alpha v2.0 | Engine Cuantitativo")
 
 

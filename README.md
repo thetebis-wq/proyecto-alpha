@@ -63,6 +63,13 @@ Se abrirá automáticamente en tu navegador predeterminado en `http://localhost:
 * Interactuar con el gráfico (zoom, paneo, inspección de precios y volúmenes).
 * Descargar los datos procesados en CSV.
 
+### 5. Lanzar el Vigilante Autónomo (Alertas Telegram 24/7)
+Doble clic al archivo:
+```powershell
+iniciar_monitor_alertas.bat
+```
+El bot monitorea Bitcoin, Ethereum y Solana periódicamente y despacha notificaciones automáticas a tu Telegram con Stop-Loss sugerido cuando se disparan las señales cuantitativas.
+
 ---
 
 ## 🛡️ Ciberseguridad y Buenas Prácticas

@@ -14,7 +14,11 @@ from typing import Any
 
 import pandas as pd
 
-from src.data.coingecko_client import CoinGeckoClient
+from src.data.coingecko_client import (
+    CoinGeckoAPIError,
+    CoinGeckoClient,
+    CoinGeckoRateLimitError,
+)
 from src.processing.market_transformer import MarketDataTransformer
 from src.visualization.market_plotter import MarketPlotter
 
@@ -42,9 +46,18 @@ def run_alpha_pipeline(coin_id: str = "bitcoin", days: int = 30) -> None:
         logger.error("No hay conectividad con la API de CoinGecko. Abortando pipeline.")
         return
 
-    raw_data: dict[str, Any] = client.get_market_chart(coin_id=coin_id, vs_currency="usd", days=days)
-    raw_path: Path = client.save_raw_data(raw_data, filename=f"{coin_id}_{days}d")
-    print(f"[OK] Extracción finalizada. Datos crudos: {raw_path.name}")
+    try:
+        raw_data: dict[str, Any] = client.get_market_chart(coin_id=coin_id, vs_currency="usd", days=days)
+        raw_path: Path = client.save_raw_data(raw_data, filename=f"{coin_id}_{days}d")
+        print(f"[OK] Extracción finalizada. Datos crudos: {raw_path.name}")
+    except CoinGeckoRateLimitError as err:
+        logger.warning(f"Límite de API alcanzado: {err}")
+        print("\n[AVISO] Se alcanzó el límite temporal de peticiones por minuto de CoinGecko.")
+        print("Espera unos instantes o añade tu COINGECKO_API_KEY a .env para mayor cuota.\n")
+        return
+    except CoinGeckoAPIError as err:
+        logger.error(f"Error de API CoinGecko: {err}")
+        return
 
     # -------------------------------------------------------------
     # FASE 3: Capa de Transformación (pandas)

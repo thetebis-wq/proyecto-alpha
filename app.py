@@ -16,7 +16,11 @@ import pandas as pd
 import streamlit as st
 
 from src.backtesting.engine import BacktestEngine, BacktestResult
-from src.data.coingecko_client import CoinGeckoClient
+from src.data.coingecko_client import (
+    CoinGeckoAPIError,
+    CoinGeckoClient,
+    CoinGeckoRateLimitError,
+)
 from src.processing.market_transformer import MarketDataTransformer
 from src.processing.technical_indicators import TechnicalIndicators
 from src.strategies.signals import SignalGenerator
@@ -337,6 +341,20 @@ try:
             mime="text/csv",
             use_container_width=True,
         )
+
+except CoinGeckoRateLimitError as err:
+    st.warning("⚠️ **Límite de Peticiones de CoinGecko Alcanzado (HTTP 429)**")
+    st.markdown(
+        "Has superado el límite temporal de consultas por minuto de la API pública de CoinGecko. "
+        "Los datos cacheados protegen el sistema, pero si acabas de refrescar, espera 30 a 60 segundos."
+    )
+    if st.button("🔄 Reintentar Ahora", key="btn_retry_ratelimit"):
+        st.cache_data.clear()
+        st.rerun()
+
+except CoinGeckoAPIError as err:
+    st.error(f"❌ **Error de Conectividad con CoinGecko:** {err}")
+    st.info("Verifica tu conexión a internet o comprueba si definiste una `COINGECKO_API_KEY` en tu archivo `.env`.")
 
 except Exception as err:
     st.error(f"Error durante la ejecución del sistema cuantitativo: {err}")

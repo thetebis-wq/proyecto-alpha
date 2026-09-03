@@ -1,0 +1,61 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "label": "⚡ Iniciar Terminal Cuantitativa (Streamlit)",
+      "type": "shell",
+      "command": ".\\.venv\\Scripts\\python.exe -m streamlit run app.py",
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      },
+      "group": {
+        "kind": "build",
+        "isDefault": true
+      }
+    },
+    {
+      "label": "🛡️ Iniciar Vigilante de Mercado (Telegram 24/7)",
+      "type": "shell",
+      "command": ".\\.venv\\Scripts\\python.exe -m src.alerts.market_monitor --interval 15",
+      "isBackground": true,
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "dedicated"
+      }
+    },
+    {
+      "label": "🧪 Diagnóstico Vigilante (1 Pasada)",
+      "type": "shell",
+      "command": ".\\.venv\\Scripts\\python.exe -m src.alerts.market_monitor --once",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "🚀 Ejecutar Pipeline Batch (main.py)",
+      "type": "shell",
+      "command": ".\\.venv\\Scripts\\python.exe main.py",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    },
+    {
+      "label": "📲 Probar Conectividad de Alertas Telegram",
+      "type": "shell",
+      "command": ".\\.venv\\Scripts\\python.exe -c \"from src.alerts.telegram_notifier import TelegramNotifier; t = TelegramNotifier(); print('Telegram test:', t.test_connection())\"",
+      "problemMatcher": [],
+      "presentation": {
+        "reveal": "always",
+        "panel": "shared"
+      }
+    }
+  ]
+}

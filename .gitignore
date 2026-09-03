@@ -1,4 +1,4 @@
-﻿# Entorno virtual
+# Entorno virtual
 .venv/
 venv/
 ENV/
@@ -16,6 +16,10 @@ data/processed/*
 # Reportes y graficos
 reports/figures/*
 !reports/figures/.gitkeep
+
+# Logs y telemetria
+*.log
+data/*.log
 
 # Python cache
 __pycache__/

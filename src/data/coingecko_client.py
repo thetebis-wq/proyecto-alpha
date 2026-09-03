@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 import logging
+import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -69,45 +70,64 @@ class CoinGeckoClient:
         else:
             logger.info("Cliente CoinGecko inicializado en modo público (sin clave).")
 
-    def _request(self, endpoint: str, params: dict[str, Any] | None = None) -> dict[str, Any]:
-        """Ejecuta una petición GET controlada y valida códigos de estado HTTP."""
+    def _request(
+        self,
+        endpoint: str,
+        params: dict[str, Any] | None = None,
+        retries: int = 1,
+    ) -> dict[str, Any]:
+        """Ejecuta una petición GET controlada y valida códigos de estado HTTP con reintentos."""
         url: str = f"{self.base_url}/{endpoint.lstrip('/')}"
 
-        try:
-            response: requests.Response = self.session.get(
-                url=url,
-                params=params,
-                timeout=self.timeout,
-            )
+        for attempt in range(retries + 1):
+            try:
+                response: requests.Response = self.session.get(
+                    url=url,
+                    params=params,
+                    timeout=self.timeout,
+                )
 
-            # Manejo específico de códigos de estado críticos
-            if response.status_code == 200:
+                # Manejo específico de códigos de estado críticos
+                if response.status_code == 200:
+                    return response.json()
+
+                if response.status_code == 429:
+                    if attempt < retries:
+                        retry_after = int(response.headers.get("Retry-After", 5))
+                        logger.warning(
+                            f"HTTP 429 (Rate Limit). Reintentando en {retry_after}s (intento {attempt + 1}/{retries})..."
+                        )
+                        time.sleep(retry_after)
+                        continue
+
+                    logger.error("Límite de peticiones alcanzado (HTTP 429 - Rate Limit Exceeded).")
+                    raise CoinGeckoRateLimitError(
+                        "Has superado el límite de peticiones por minuto de CoinGecko. "
+                        "Espera unos segundos antes de reintentar."
+                    )
+
+                if response.status_code in (401, 403):
+                    logger.error(f"Error de autenticación/autorización (HTTP {response.status_code}).")
+                    raise CoinGeckoAPIError(
+                        f"Error de credenciales (HTTP {response.status_code}): "
+                        "Verifica tu COINGECKO_API_KEY en el archivo .env."
+                    )
+
+                # Para cualquier otro error (400, 500, etc.)
+                response.raise_for_status()
                 return response.json()
 
-            if response.status_code == 429:
-                logger.error("Límite de peticiones alcanzado (HTTP 429 - Rate Limit Exceeded).")
-                raise CoinGeckoRateLimitError(
-                    "Has superado el límite de peticiones por minuto de CoinGecko. "
-                    "Espera unos segundos antes de reintentar."
-                )
-
-            if response.status_code in (401, 403):
-                logger.error(f"Error de autenticación/autorización (HTTP {response.status_code}).")
-                raise CoinGeckoAPIError(
-                    f"Error de credenciales (HTTP {response.status_code}): "
-                    "Verifica tu COINGECKO_API_KEY en el archivo .env."
-                )
-
-            # Para cualquier otro error (400, 500, etc.)
-            response.raise_for_status()
-            return response.json()
-
-        except requests.exceptions.Timeout as err:
-            logger.error(f"Tiempo de espera agotado al conectar con {url}.")
-            raise CoinGeckoAPIError(f"Timeout al conectar con CoinGecko: {err}") from err
-        except requests.exceptions.ConnectionError as err:
-            logger.error(f"Error de conexión de red al contactar {url}.")
-            raise CoinGeckoAPIError(f"Error de red: {err}") from err
+            except (requests.exceptions.Timeout, requests.exceptions.ConnectionError) as err:
+                if attempt < retries:
+                    logger.warning(f"Error de red transitorio ({err}). Reintentando en 3s...")
+                    time.sleep(3)
+                    continue
+                if isinstance(err, requests.exceptions.Timeout):
+                    logger.error(f"Tiempo de espera agotado al conectar con {url}.")
+                    raise CoinGeckoAPIError(f"Timeout al conectar con CoinGecko: {err}") from err
+                logger.error(f"Error de conexión de red al contactar {url}.")
+                raise CoinGeckoAPIError(f"Error de red: {err}") from err
+        raise CoinGeckoAPIError("Número máximo de reintentos excedido.")
 
     def ping(self) -> bool:
         """Verifica la conectividad con el servidor de CoinGecko (/ping)."""

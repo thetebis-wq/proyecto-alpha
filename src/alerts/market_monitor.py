@@ -17,6 +17,8 @@ from src.alerts.telegram_notifier import TelegramNotifier
 from src.data.coingecko_client import CoinGeckoClient
 from src.processing.market_transformer import MarketDataTransformer
 from src.processing.technical_indicators import TechnicalIndicators
+from logging.handlers import RotatingFileHandler
+from src.config import DATA_DIR
 from src.strategies.signals import SignalGenerator
 
 logging.basicConfig(
@@ -25,6 +27,19 @@ logging.basicConfig(
     datefmt="%Y-%m-%d %H:%M:%S",
 )
 logger = logging.getLogger("MarketMonitor")
+
+# Configurar registro persistente en data/monitor.log
+log_file = DATA_DIR / "monitor.log"
+file_handler = RotatingFileHandler(
+    log_file,
+    maxBytes=5 * 1024 * 1024,
+    backupCount=3,
+    encoding="utf-8",
+)
+file_handler.setFormatter(
+    logging.Formatter("%(asctime)s [%(levelname)s] %(message)s", datefmt="%Y-%m-%d %H:%M:%S")
+)
+logger.addHandler(file_handler)
 
 # Catálogo de monedas a vigilar
 MONITORED_ASSETS: dict[str, str] = {
@@ -125,7 +140,14 @@ class MarketMonitor:
 
         try:
             while True:
-                self.run_once()
+                try:
+                    self.run_once()
+                except Exception as loop_err:
+                    logger.error(f"Error inesperado durante la ronda de escaneo: {loop_err}")
+                    logger.info("Recuperando estado... reintentando en 60 segundos.")
+                    time.sleep(60)
+                    continue
+
                 logger.info(f"Durmiendo por {self.interval_seconds // 60} minutos...")
                 time.sleep(self.interval_seconds)
         except KeyboardInterrupt:
@@ -137,11 +159,29 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Monitor de mercado autónomo con alertas de Telegram.")
     parser.add_argument("--once", action="store_true", help="Ejecuta una sola verificación y termina.")
     parser.add_argument("--interval", type=int, default=15, help="Intervalo en minutos entre escaneos (default: 15).")
+    parser.add_argument(
+        "--test",
+        action="store_true",
+        help="Diagnóstico rápido de conectividad CoinGecko y Telegram sin iniciar el bucle.",
+    )
     args = parser.parse_args()
 
     monitor = MarketMonitor(check_interval_minutes=args.interval)
 
-    if args.once:
+    if args.test:
+        print("\n" + "=" * 55)
+        print("   PROYECTO ALPHA: DIAGNÓSTICO DEL VIGILANTE")
+        print("=" * 55)
+        cg_ok = monitor.client.ping()
+        print(f"1. Conexión con CoinGecko: {'[OK]' if cg_ok else '[FALLO]'}")
+        tg_ok = monitor.notifier.is_configured()
+        print(f"2. Credenciales Telegram: {'[CONFIGURADO]' if tg_ok else '[NO CONFIGURADO]'}")
+        if tg_ok:
+            print("3. Enviando mensaje de prueba a Telegram...")
+            test_res = monitor.notifier.test_connection()
+            print(f"   Resultado entrega: {'[EXITOSA]' if test_res else '[FALLIDA]'}")
+        print("=" * 55 + "\n")
+    elif args.once:
         monitor.run_once()
     else:
         monitor.start_loop()

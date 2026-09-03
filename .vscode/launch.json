@@ -1,0 +1,58 @@
+{
+  "version": "0.2.0",
+  "configurations": [
+    {
+      "name": "⚡ App 1: Terminal Cuantitativa (Streamlit)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "streamlit",
+      "args": [
+        "run",
+        "app.py",
+        "--server.headless=true"
+      ],
+      "jinja": true,
+      "justMyCode": true,
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "🛡️ App 2: Vigilante de Mercado 24/7 (Telegram)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "src.alerts.market_monitor",
+      "args": [
+        "--interval",
+        "15"
+      ],
+      "justMyCode": true,
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "🧪 App 2: Diagnóstico Rápido Vigilante (1 pasada)",
+      "type": "debugpy",
+      "request": "launch",
+      "module": "src.alerts.market_monitor",
+      "args": [
+        "--once"
+      ],
+      "justMyCode": true,
+      "console": "integratedTerminal"
+    },
+    {
+      "name": "🚀 Pipeline ETL por Lotes (main.py)",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${workspaceFolder}/main.py",
+      "console": "integratedTerminal",
+      "justMyCode": true
+    },
+    {
+      "name": "🐍 Python: Archivo Actual",
+      "type": "debugpy",
+      "request": "launch",
+      "program": "${file}",
+      "console": "integratedTerminal",
+      "justMyCode": true
+    }
+  ]
+}

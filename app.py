@@ -110,6 +110,28 @@ elif strategy_key == "mean_reversion":
     strategy_params["rsi_overbought"] = st.sidebar.slider("Umbral Sobrecompra RSI", min_value=55, max_value=85, value=65)
 
 st.sidebar.markdown("---")
+st.sidebar.subheader("🛡️ Fricción y Gestión de Riesgo")
+fee_rate_pct: float = st.sidebar.number_input(
+    "Comisión de Exchange (%):",
+    min_value=0.0,
+    max_value=1.0,
+    value=0.10,
+    step=0.01,
+    help="Comisión cobrada por orden en el exchange (ej. 0.10% en Binance).",
+)
+fee_rate: float = fee_rate_pct / 100.0
+
+enable_sl: bool = st.sidebar.checkbox("Habilitar Stop-Loss", value=True)
+sl_val: float | None = None
+if enable_sl:
+    sl_val = st.sidebar.slider("Stop-Loss (% Máx Caída):", min_value=0.5, max_value=10.0, value=2.0, step=0.5)
+
+enable_tp: bool = st.sidebar.checkbox("Habilitar Take-Profit", value=True)
+tp_val: float | None = None
+if enable_tp:
+    tp_val = st.sidebar.slider("Take-Profit (% Ganancia Objetivo):", min_value=1.0, max_value=25.0, value=5.0, step=0.5)
+
+st.sidebar.markdown("---")
 initial_capital: float = st.sidebar.number_input(
     "Capital Inicial Simulado ($ USD):",
     min_value=500.0,
@@ -132,7 +154,7 @@ if st.sidebar.button("📲 Probar Alerta en Celular", use_container_width=True):
     else:
         st.sidebar.error("No se pudo enviar. Revisa tus credenciales en .env.")
 
-st.sidebar.caption("⚡ Proyecto Alpha v2.0 | Engine Cuantitativo")
+st.sidebar.caption("⚡ Proyecto Alpha v2.5 | Realismo Cuantitativo")
 
 
 # -------------------------------------------------------------
@@ -150,10 +172,13 @@ try:
             params=strategy_params,
         )
 
-        # Ejecutar simulación de backtesting
+        # Ejecutar simulación de backtesting con realismo financiero
         backtest_res: BacktestResult = BacktestEngine.run_backtest(
             df_with_signals=df_with_signals,
             initial_capital=initial_capital,
+            fee_rate=fee_rate,
+            stop_loss_pct=sl_val,
+            take_profit_pct=tp_val,
         )
 
     # ---------------------------------------------------------
@@ -220,7 +245,7 @@ try:
 
         with b_col1:
             st.metric(
-                label="Retorno Estrategia",
+                label="Retorno Neto Estrategia",
                 value=f"{backtest_res.total_return_pct:+.2f}%",
                 delta=f"${backtest_res.final_capital - backtest_res.initial_capital:+,.2f}",
             )
@@ -248,6 +273,17 @@ try:
                 help="Ganancias brutas divididas entre pérdidas brutas.",
             )
 
+        # Fila 2: Desglose de Fricción y Riesgo
+        r_col1, r_col2, r_col3, r_col4 = st.columns(4)
+        with r_col1:
+            st.metric("Comisiones Pagadas", f"${backtest_res.total_fees_paid:,.2f}", help=f"Tasa configurada: {fee_rate_pct:.2f}% por orden.")
+        with r_col2:
+            st.metric("Salidas por Stop-Loss", f"{backtest_res.stop_loss_count} trades", help="Trades cerrados por límite de pérdida de emergencia.")
+        with r_col3:
+            st.metric("Salidas por Take-Profit", f"{backtest_res.take_profit_count} trades", help="Trades cerrados por objetivo de ganancia.")
+        with r_col4:
+            st.metric("Salidas por Señal Técnica", f"{backtest_res.signal_exit_count} trades", help="Trades cerrados por cambio en el indicador.")
+
         # Gráfico de Curva de Capital
         fig_equity = InteractivePlotter.create_equity_curve_figure(
             equity_curve=backtest_res.equity_curve,
@@ -257,10 +293,18 @@ try:
         st.plotly_chart(fig_equity, use_container_width=True)
 
         # Registro de Trades
-        st.subheader(f"📋 Historial de Operaciones ({backtest_res.total_trades} trades)")
+        st.subheader(f"📋 Historial de Operaciones Detallado ({backtest_res.total_trades} trades)")
         if backtest_res.trades:
             trades_df = pd.DataFrame(backtest_res.trades)
+            reason_map = {
+                "STOP_LOSS": "🛑 Stop-Loss",
+                "TAKE_PROFIT": "🎯 Take-Profit",
+                "SEÑAL_ESTRATEGIA": "🔄 Señal",
+                "FIN_PERIODO": "⏳ Fin Período",
+            }
+            trades_df["exit_reason"] = trades_df["exit_reason"].map(lambda x: reason_map.get(x, x))
             trades_df["pnl_pct"] = trades_df["pnl_pct"].map(lambda x: f"{x:+.2f}%")
+            trades_df["pnl_usd"] = trades_df["pnl_usd"].map(lambda x: f"${x:+,.2f}")
             trades_df["entry_price"] = trades_df["entry_price"].map(lambda x: f"${x:,.2f}")
             trades_df["exit_price"] = trades_df["exit_price"].map(lambda x: f"${x:,.2f}")
             trades_df.rename(
@@ -269,7 +313,9 @@ try:
                     "exit_date": "Fecha Salida",
                     "entry_price": "Precio Entrada",
                     "exit_price": "Precio Salida",
-                    "pnl_pct": "Rendimiento (%)",
+                    "exit_reason": "Motivo Salida",
+                    "pnl_pct": "Rendimiento Neto (%)",
+                    "pnl_usd": "Ganancia/Pérdida ($)",
                     "won": "¿Ganador?",
                 },
                 inplace=True,

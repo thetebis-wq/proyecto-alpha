@@ -1,0 +1,24 @@
+﻿# Entorno virtual
+.venv/
+venv/
+ENV/
+
+# Secretos y credenciales
+.env
+*.env
+
+# Datos locales
+data/raw/*
+data/processed/*
+!data/raw/.gitkeep
+!data/processed/.gitkeep
+
+# Reportes y graficos
+reports/figures/*
+!reports/figures/.gitkeep
+
+# Python cache
+__pycache__/
+*.py[cod]
+*.class
+.ipynb_checkpoints/

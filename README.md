@@ -47,15 +47,21 @@ proyecto-alpha/
 .\.venv\Scripts\Activate.ps1
 ```
 
-### 3. Ejecutar el Pipeline Completo
+### 3. Ejecutar el Pipeline por Lotes (Batch)
 ```powershell
 python main.py
 ```
 
-El pipeline ejecutará automáticamente:
-1. Conexión a la API de CoinGecko y respaldo en `data/raw/`.
-2. Normalización de timestamps a UTC y cálculo de indicadores (`return_pct`, `sma_24h`) en `data/processed/`.
-3. Exportación de gráfico de doble panel (Precio/SMA arriba y Volumen abajo) en `reports/figures/`.
+### 4. Lanzar la Aplicación Interactiva de Escritorio (Dashboard)
+```powershell
+streamlit run app.py
+```
+Se abrirá automáticamente en tu navegador predeterminado en `http://localhost:8501`. Podrás:
+* Seleccionar activos (Bitcoin, Ethereum, Solana, Cardano, etc.).
+* Cambiar temporalidades de 7 a 365 días.
+* Calibrar la media móvil (SMA) con un deslizador reactivo.
+* Interactuar con el gráfico (zoom, paneo, inspección de precios y volúmenes).
+* Descargar los datos procesados en CSV.
 
 ---
 

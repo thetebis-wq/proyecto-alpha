@@ -1,7 +1,11 @@
 """Aplicación interactiva de escritorio para Proyecto Alpha – El Pulso del Mercado.
 
-Desarrollada con Streamlit y Plotly. Conecta las capas de datos, procesamiento
-y visualización en un dashboard interactivo en tiempo real con caché inteligente.
+Terminal analítica y de backtesting cuantitativo desarrollada con Streamlit y Plotly.
+Integra:
+- Ingestión de datos de CoinGecko con caché inteligente.
+- Cálculo de indicadores técnicos multivariables (RSI, Bollinger, MACD).
+- Generación algorítmica de señales de compra/venta.
+- Motor de backtesting vectorizado con métricas de riesgo y curvas de balance.
 """
 
 from __future__ import annotations
@@ -11,54 +15,50 @@ from typing import Any
 import pandas as pd
 import streamlit as st
 
+from src.backtesting.engine import BacktestEngine, BacktestResult
 from src.data.coingecko_client import CoinGeckoClient
 from src.processing.market_transformer import MarketDataTransformer
+from src.processing.technical_indicators import TechnicalIndicators
+from src.strategies.signals import SignalGenerator
 from src.visualization.interactive_plotter import InteractivePlotter
 
 # -------------------------------------------------------------
 # 1. Configuración de la Página
 # -------------------------------------------------------------
 st.set_page_config(
-    page_title="Proyecto Alpha – Terminal de Mercado",
-    page_icon="📈",
+    page_title="Proyecto Alpha – Terminal Cuantitativa",
+    page_icon="⚡",
     layout="wide",
     initial_sidebar_state="expanded",
 )
 
 # -------------------------------------------------------------
-# 2. Funciones de Carga con Caché Inteligente (Respetando Rate Limits)
+# 2. Funciones de Carga y Procesamiento con Caché
 # -------------------------------------------------------------
 @st.cache_data(ttl=300, show_spinner=False)
-def load_market_data(coin_id: str, days: int) -> tuple[dict[str, Any], pd.DataFrame]:
-    """Descarga datos crudos y los transforma en DataFrame con caché de 5 minutos.
-
-    Garantiza que la API de CoinGecko no se sobrecargue con peticiones repetidas.
-    """
+def get_base_market_data(coin_id: str, days: int) -> pd.DataFrame:
+    """Descarga datos crudos y devuelve el DataFrame procesado básico con caché."""
     client = CoinGeckoClient()
-
-    # 1. Extraer datos crudos
     raw_data = client.get_market_chart(coin_id=coin_id, vs_currency="usd", days=days)
     client.save_raw_data(raw_data, filename=f"{coin_id}_{days}d")
-
-    # 2. Transformar con pandas
     df = MarketDataTransformer.json_to_dataframe(raw_data)
-    return raw_data, df
+    # Agregar todos los indicadores técnicos de base
+    df = TechnicalIndicators.add_all_indicators(df)
+    return df
 
 
 @st.cache_data(ttl=60, show_spinner=False)
-def load_current_price(coin_id: str) -> dict[str, Any]:
-    """Consulta el precio spot actual y variación en tiempo casi real."""
+def get_spot_data(coin_id: str) -> dict[str, Any]:
+    """Consulta rápida de precio spot actual."""
     client = CoinGeckoClient()
     return client.get_current_price(coin_ids=[coin_id], vs_currencies=["usd"])
 
 
 # -------------------------------------------------------------
-# 3. Barra Lateral (Controles Interactivos)
+# 3. Barra Lateral (Controles de Mercado y Estrategia)
 # -------------------------------------------------------------
-st.sidebar.title("⚙️ Controles de Mercado")
-st.sidebar.markdown("Personaliza los parámetros del análisis en tiempo real:")
+st.sidebar.title("⚙️ Parámetros de Mercado")
 
-# Catálogo de Activos
 COINS_MAP: dict[str, str] = {
     "Bitcoin (BTC)": "bitcoin",
     "Ethereum (ETH)": "ethereum",
@@ -69,114 +69,219 @@ COINS_MAP: dict[str, str] = {
 }
 
 selected_coin_label: str = st.sidebar.selectbox(
-    "Selecciona Criptoactivo:",
+    "Criptoactivo:",
     options=list(COINS_MAP.keys()),
     index=0,
 )
 coin_id: str = COINS_MAP[selected_coin_label]
 
-# Selector de Rango Temporal
 timeframe_days: int = st.sidebar.select_slider(
-    "Rango Temporal Histórico (Días):",
+    "Historial (Días):",
     options=[7, 14, 30, 90, 180, 365],
     value=30,
 )
 
-# Calibrador de Media Móvil (SMA)
-sma_window: int = st.sidebar.slider(
-    "Período de Media Móvil (Horas):",
-    min_value=5,
-    max_value=120,
-    value=24,
-    step=1,
-    help="Define el suavizado de la tendencia. 24h = tendencia diaria; 72h = tendencia de 3 días.",
+st.sidebar.markdown("---")
+st.sidebar.subheader("🤖 Configuración de Estrategia")
+
+STRATEGIES = {
+    "Cruce de Medias (SMA Crossover)": "sma_crossover",
+    "Reversión a la Media (Bollinger + RSI)": "mean_reversion",
+}
+selected_strategy_label = st.sidebar.selectbox(
+    "Estrategia Algorítmica:",
+    options=list(STRATEGIES.keys()),
 )
+strategy_key = STRATEGIES[selected_strategy_label]
+
+strategy_params: dict[str, Any] = {}
+
+if strategy_key == "sma_crossover":
+    c_fast, c_slow = st.sidebar.columns(2)
+    with c_fast:
+        strategy_params["fast_period"] = st.number_input("SMA Rápida (h)", min_value=3, max_value=50, value=12)
+    with c_slow:
+        strategy_params["slow_period"] = st.number_input("SMA Lenta (h)", min_value=10, max_value=120, value=24)
+
+elif strategy_key == "mean_reversion":
+    strategy_params["bb_period"] = st.sidebar.slider("Período Bollinger", min_value=10, max_value=50, value=20)
+    strategy_params["rsi_period"] = 14
+    strategy_params["rsi_oversold"] = st.sidebar.slider("Umbral Sobreventa RSI", min_value=15, max_value=45, value=35)
+    strategy_params["rsi_overbought"] = st.sidebar.slider("Umbral Sobrecompra RSI", min_value=55, max_value=85, value=65)
 
 st.sidebar.markdown("---")
-# Botón para forzar actualización inmediata
-if st.sidebar.button("🔄 Refrescar Datos de API", use_container_width=True):
+initial_capital: float = st.sidebar.number_input(
+    "Capital Inicial Simulado ($ USD):",
+    min_value=500.0,
+    max_value=1000000.0,
+    value=10000.0,
+    step=1000.0,
+)
+
+if st.sidebar.button("🔄 Refrescar API y Recalcular", use_container_width=True):
     st.cache_data.clear()
     st.rerun()
 
-st.sidebar.caption("⚡ Proyecto Alpha v1.0 | Alimentado por CoinGecko REST API")
+st.sidebar.caption("⚡ Proyecto Alpha v2.0 | Engine Cuantitativo")
 
 
 # -------------------------------------------------------------
-# 4. Encabezado y Métricas Principales (KPI Cards)
+# 4. Procesamiento de Datos y Ejecución de Backtest
 # -------------------------------------------------------------
-st.title("📈 Proyecto Alpha – El Pulso del Mercado")
-st.markdown(f"Análisis cuantitativo de alta frecuencia para **{selected_coin_label}** en dólares estadounidenses.")
-
 try:
-    with st.spinner("Conectando con CoinGecko y procesando datos..."):
-        spot_info = load_current_price(coin_id)
-        _, df = load_market_data(coin_id=coin_id, days=timeframe_days)
+    with st.spinner("Descargando mercado y ejecutando simulación..."):
+        spot_info = get_spot_data(coin_id)
+        df_base = get_base_market_data(coin_id=coin_id, days=timeframe_days)
+
+        # Aplicar estrategia seleccionada
+        df_with_signals = SignalGenerator.apply_strategy(
+            df=df_base,
+            strategy_name=strategy_key,
+            params=strategy_params,
+        )
+
+        # Ejecutar simulación de backtesting
+        backtest_res: BacktestResult = BacktestEngine.run_backtest(
+            df_with_signals=df_with_signals,
+            initial_capital=initial_capital,
+        )
+
+    # ---------------------------------------------------------
+    # 5. Encabezado y Tarjetas KPI en Vivo
+    # ---------------------------------------------------------
+    st.title("⚡ Proyecto Alpha – Terminal Cuantitativa")
+    st.markdown(f"Análisis y simulación algorítmica para **{selected_coin_label}** en dólares estadounidenses.")
 
     coin_spot = spot_info.get(coin_id, {})
-    current_price: float = coin_spot.get("usd", df["price_usd"].iloc[-1])
+    current_price: float = coin_spot.get("usd", df_base["price_usd"].iloc[-1])
     change_24h: float = coin_spot.get("usd_24h_change", 0.0)
-    vol_24h: float = coin_spot.get("usd_24h_vol", df["volume_24h_usd"].iloc[-1])
+    vol_24h: float = coin_spot.get("usd_24h_vol", df_base["volume_24h_usd"].iloc[-1])
 
-    period_min: float = df["price_usd"].min()
-    period_max: float = df["price_usd"].max()
-
-    # Fila de métricas institucionales
-    col1, col2, col3, col4 = st.columns(4)
-
-    with col1:
-        st.metric(
-            label="Precio Spot Actual",
-            value=f"${current_price:,.2f}",
-            delta=f"{change_24h:+.2f}% (24h)",
-        )
-
-    with col2:
-        st.metric(
-            label="Volumen 24 Horas",
-            value=f"${vol_24h / 1e9:,.2f} B",
-        )
-
-    with col3:
-        st.metric(
-            label=f"Mínimo del Período ({timeframe_days}d)",
-            value=f"${period_min:,.2f}",
-        )
-
-    with col4:
-        st.metric(
-            label=f"Máximo del Período ({timeframe_days}d)",
-            value=f"${period_max:,.2f}",
-        )
+    kpi1, kpi2, kpi3, kpi4 = st.columns(4)
+    with kpi1:
+        st.metric("Precio Spot Actual", f"${current_price:,.2f}", f"{change_24h:+.2f}% (24h)")
+    with kpi2:
+        st.metric("Volumen 24 Horas", f"${vol_24h / 1e9:,.2f} B")
+    with kpi3:
+        st.metric("Mínimo del Período", f"${df_base['price_usd'].min():,.2f}")
+    with kpi4:
+        st.metric("Máximo del Período", f"${df_base['price_usd'].max():,.2f}")
 
     st.markdown("---")
 
     # ---------------------------------------------------------
-    # 5. Gráfico Financiero Interactivo de Doble Panel
+    # 6. Pestañas de la Aplicación
     # ---------------------------------------------------------
-    st.subheader("📊 Gráfico Interactivo de Precio y Liquidez")
-    fig = InteractivePlotter.create_market_figure(
-        df=df,
-        asset_name=selected_coin_label,
-        sma_period=sma_window,
+    tab_market, tab_oscillators, tab_backtest = st.tabs(
+        ["📊 Análisis de Mercado & Señales", "🌊 Osciladores (RSI & MACD)", "🤖 Laboratorio de Backtesting"]
     )
-    st.plotly_chart(fig, use_container_width=True)
+
+    # PESTAÑA 1: Mercado y Señales
+    with tab_market:
+        col_t1, col_t2 = st.columns([1, 1])
+        with col_t1:
+            show_bb = st.checkbox("Mostrar Bandas de Bollinger", value=True)
+        with col_t2:
+            show_sigs = st.checkbox("Mostrar Señales de Compra/Venta en Gráfico", value=True)
+
+        sma_ref = strategy_params.get("slow_period", 24)
+        fig_market = InteractivePlotter.create_market_figure(
+            df=df_with_signals,
+            asset_name=selected_coin_label,
+            sma_period=sma_ref,
+            show_bollinger=show_bb,
+            show_signals=show_sigs,
+        )
+        st.plotly_chart(fig_market, use_container_width=True)
+
+    # PESTAÑA 2: Osciladores
+    with tab_oscillators:
+        st.info("💡 **RSI** indica Sobrecompra (>70) o Sobreventa (<30). **MACD** mide aceleración e inversión de tendencia.")
+        fig_osc = InteractivePlotter.create_oscillators_figure(df=df_base)
+        st.plotly_chart(fig_osc, use_container_width=True)
+
+    # PESTAÑA 3: Backtesting Lab
+    with tab_backtest:
+        st.subheader(f"Resultados de Simulación: {selected_strategy_label}")
+
+        # Métricas de Desempeño
+        b_col1, b_col2, b_col3, b_col4, b_col5 = st.columns(5)
+        strat_color = "normal" if backtest_res.total_return_pct >= 0 else "inverse"
+
+        with b_col1:
+            st.metric(
+                label="Retorno Estrategia",
+                value=f"{backtest_res.total_return_pct:+.2f}%",
+                delta=f"${backtest_res.final_capital - backtest_res.initial_capital:+,.2f}",
+            )
+        with b_col2:
+            st.metric(
+                label="Buy & Hold (Benchmark)",
+                value=f"{backtest_res.benchmark_return_pct:+.2f}%",
+            )
+        with b_col3:
+            st.metric(
+                label="Win Rate (% Aciertos)",
+                value=f"{backtest_res.win_rate_pct:.1f}%",
+                help=f"{backtest_res.winning_trades} ganadores de {backtest_res.total_trades} trades.",
+            )
+        with b_col4:
+            st.metric(
+                label="Máximo Drawdown (Riesgo)",
+                value=f"{backtest_res.max_drawdown_pct:.2f}%",
+                help="La máxima caída registrada desde un pico de capital.",
+            )
+        with b_col5:
+            st.metric(
+                label="Profit Factor",
+                value=f"{backtest_res.profit_factor:.2f}",
+                help="Ganancias brutas divididas entre pérdidas brutas.",
+            )
+
+        # Gráfico de Curva de Capital
+        fig_equity = InteractivePlotter.create_equity_curve_figure(
+            equity_curve=backtest_res.equity_curve,
+            benchmark_curve=backtest_res.benchmark_curve,
+            drawdown_curve=backtest_res.drawdown_curve,
+        )
+        st.plotly_chart(fig_equity, use_container_width=True)
+
+        # Registro de Trades
+        st.subheader(f"📋 Historial de Operaciones ({backtest_res.total_trades} trades)")
+        if backtest_res.trades:
+            trades_df = pd.DataFrame(backtest_res.trades)
+            trades_df["pnl_pct"] = trades_df["pnl_pct"].map(lambda x: f"{x:+.2f}%")
+            trades_df["entry_price"] = trades_df["entry_price"].map(lambda x: f"${x:,.2f}")
+            trades_df["exit_price"] = trades_df["exit_price"].map(lambda x: f"${x:,.2f}")
+            trades_df.rename(
+                columns={
+                    "entry_date": "Fecha Entrada",
+                    "exit_date": "Fecha Salida",
+                    "entry_price": "Precio Entrada",
+                    "exit_price": "Precio Salida",
+                    "pnl_pct": "Rendimiento (%)",
+                    "won": "¿Ganador?",
+                },
+                inplace=True,
+            )
+            st.dataframe(trades_df, use_container_width=True)
+        else:
+            st.info("No se generaron trades con los parámetros actuales en este rango temporal.")
 
     # ---------------------------------------------------------
-    # 6. Tabla de Datos Procesados y Descarga
+    # 7. Explorador y Descarga de Datos
     # ---------------------------------------------------------
-    with st.expander("🔍 Explorar Datos Tabulares y Descargar CSV"):
-        st.write("Últimas 20 observaciones procesadas:")
-        st.dataframe(df.tail(20), use_container_width=True)
-
-        csv_data = df.to_csv().encode("utf-8")
+    with st.expander("🔍 Explorar Datos Tabulares y Descargar Dataset Completo"):
+        st.dataframe(df_with_signals.tail(30), use_container_width=True)
+        csv_bytes = df_with_signals.to_csv().encode("utf-8")
         st.download_button(
-            label=f"📥 Descargar Dataset Procesado ({coin_id}_{timeframe_days}d.csv)",
-            data=csv_data,
-            file_name=f"{coin_id}_{timeframe_days}d_processed.csv",
+            label=f"📥 Descargar Dataset Cuantitativo ({coin_id}_{timeframe_days}d_full.csv)",
+            data=csv_bytes,
+            file_name=f"{coin_id}_{timeframe_days}d_quant_dataset.csv",
             mime="text/csv",
             use_container_width=True,
         )
 
 except Exception as err:
-    st.error(f"Error al conectar con la API o procesar los datos: {err}")
-    st.info("Espera unos segundos antes de reintentar si alcanzaste el límite de peticiones de CoinGecko.")
+    st.error(f"Error durante la ejecución del sistema cuantitativo: {err}")
+    st.info("Verifica tu conexión a internet o espera unos segundos antes de reintentar.")

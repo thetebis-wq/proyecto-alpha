@@ -1,78 +1,61 @@
 # Proyecto Alpha – El Pulso del Mercado
 
-Arquitectura profesional para la extracción, procesamiento y análisis visual de datos de mercados financieros en tiempo real y series temporales históricas.
+Terminal web cuantitativa profesional para la extracción, procesamiento, modelado algorítmico y backtesting de activos financieros en tiempo real e históricos.
+
+Migrado a un stack web nativo (React + Vite + TypeScript + Tailwind CSS + Express) optimizado para despliegue en la nube y ejecución en Google AI Studio.
 
 ---
 
 ## 🏛️ Arquitectura del Sistema
 
-El proyecto sigue una estricta **separación de responsabilidades** desacoplando cada fase del ciclo de vida de los datos:
+El proyecto implementa una separación cuantitativa completa:
 
 ```
 proyecto-alpha/
 ├── src/
-│   ├── config.py                 <- Carga centralizada de .env y definición de rutas
-│   ├── data/
-│   │   ├── coingecko_client.py   <- Cliente HTTP para la API REST de CoinGecko
-│   │   └── download_market_data.py
-│   ├── processing/
-│   │   └── market_transformer.py <- Limpieza y transformación a DataFrames (pandas)
-│   └── visualization/
-│       └── market_plotter.py     <- Generación de gráficos institucionales (matplotlib)
+│   ├── components/
+│   │   ├── Sidebar.tsx           <- Controles de mercado, hiperparámetros y riesgo
+│   │   ├── KpiHeader.tsx         <- Tarjetas métricas spot, volumen y rango
+│   │   ├── MarketTab.tsx         <- Gráficos de velas/precio con Bollinger y señales
+│   │   ├── OscillatorsTab.tsx    <- Gráficos de RSI (14) y MACD (12,26,9) con histograma
+│   │   ├── BacktestTab.tsx       <- Curva de capital, drawdown submarino y tabla de trades
+│   │   └── DatasetExpander.tsx   <- Visor tabular y exportador CSV
+│   ├── lib/
+│   │   ├── technical_indicators.ts <- RSI, Bandas de Bollinger, MACD
+│   │   ├── strategies.ts         <- Cruce SMA y Reversión a la Media
+│   │   ├── backtest_engine.ts    <- Motor mark-to-market con comisiones y SL/TP
+│   │   └── mock_data.ts          <- Generador realista de respaldo / fallback
+│   ├── types.ts                  <- Tipos e interfaces TypeScript estrictas
+│   ├── App.tsx                   <- Orquestador de estado y terminal
+│   ├── main.tsx                  <- Punto de entrada React 18
+│   └── index.css                 <- Estilos globales Tailwind CSS v4
 │
-├── data/
-│   ├── raw/                      <- Datos crudos originales (JSON) sin alterar
-│   └── processed/                <- Datos limpios con indicadores financieros (CSV)
-│
-├── reports/
-│   └── figures/                  <- Gráficos analíticos generados (PNG alta resolución)
-│
-├── .env                          <- Secretos y credenciales (IGNORADO por Git)
-├── .env.example                  <- Plantilla pública de variables de entorno
-├── .gitignore                    <- Protección contra fugas de credenciales y datos
-├── requirements.txt              <- Dependencias del stack cuantitativo
-└── main.py                       <- Orquestador del pipeline de datos
+├── server.ts                     <- Servidor backend Express con proxy a CoinGecko y Telegram
+├── package.json                  <- Dependencias y scripts de compilación
+├── tsconfig.json                 <- Configuración TypeScript estricta
+└── .env.example                  <- Plantilla de variables de entorno (CoinGecko, Telegram)
 ```
 
 ---
 
 ## 🚀 Instalación y Uso
 
-### 1. Requisitos
-* Python 3.10+ en Windows 10/11
-* Entorno virtual aislado (`.venv`)
-
-### 2. Activar entorno virtual
-```powershell
-.\.venv\Scripts\Activate.ps1
+### 1. Variables de Entorno
+Copia el archivo `.env.example` a `.env` si deseas configurar credenciales reales para CoinGecko y Telegram:
+```env
+COINGECKO_API_KEY=
+TELEGRAM_BOT_TOKEN=
+TELEGRAM_CHAT_ID=
 ```
 
-### 3. Ejecutar el Pipeline por Lotes (Batch)
-```powershell
-python main.py
+### 2. Modo Desarrollo
+```bash
+npm run dev
 ```
+La aplicación inicia en `http://localhost:3000`.
 
-### 4. Lanzar la Aplicación Interactiva de Escritorio (Dashboard)
-```powershell
-streamlit run app.py
+### 3. Compilación de Producción
+```bash
+npm run build
+npm start
 ```
-Se abrirá automáticamente en tu navegador predeterminado en `http://localhost:8501`. Podrás:
-* Seleccionar activos (Bitcoin, Ethereum, Solana, Cardano, etc.).
-* Cambiar temporalidades de 7 a 365 días.
-* Calibrar la media móvil (SMA) con un deslizador reactivo.
-* Interactuar con el gráfico (zoom, paneo, inspección de precios y volúmenes).
-* Descargar los datos procesados en CSV.
-
-### 5. Lanzar el Vigilante Autónomo (Alertas Telegram 24/7)
-Doble clic al archivo:
-```powershell
-iniciar_monitor_alertas.bat
-```
-El bot monitorea Bitcoin, Ethereum y Solana periódicamente y despacha notificaciones automáticas a tu Telegram con Stop-Loss sugerido cuando se disparan las señales cuantitativas.
-
----
-
-## 🛡️ Ciberseguridad y Buenas Prácticas
-* **Sin secretos en código:** Todas las claves se manejan vía `.env` usando `python-dotenv`.
-* **Protección Git:** `.gitignore` excluye `.env`, `.venv` y los archivos de datos para evitar fugas de datos y saturación del repositorio.
-* **Trazabilidad Cuantitativa:** Los datos originales nunca se sobreescriben, garantizando reproducibilidad para futuro *backtesting*.

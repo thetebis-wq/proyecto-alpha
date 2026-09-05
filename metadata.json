@@ -1,0 +1,8 @@
+{
+  "name": "Proyecto Alpha – Terminal Cuantitativa",
+  "description": "Terminal analítica y de backtesting cuantitativo para criptomercados con indicadores técnicos, señales algorítmicas y gestión de riesgo.",
+  "requestFramePermissions": [],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
